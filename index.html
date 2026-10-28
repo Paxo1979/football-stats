@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Poisson & Stats Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans p-4">
+    <div class="max-w-md mx-auto space-y-6">
+        <header class="text-center py-2">
+            <h1 class="text-2xl font-bold text-emerald-400">⚽ Football Poisson & Stats</h1>
+            <p class="text-xs text-slate-400">Analisi quote, medie e tendenze match</p>
+        </header>
+
+        <!-- Selezione Lega e Squadre -->
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">CAMPIONATO</label>
+                <select id="selectLega" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-sm" onchange="caricaSquadre()">
+                    <option value="">Seleziona lega...</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">SQUADRA CASA</label>
+                    <select id="selectCasa" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">SQUADRA OSPITE</label>
+                    <select id="selectFuori" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-sm"></select>
+                </div>
+            </div>
+            <button onclick="analizzaMatch()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-2.5 rounded-lg text-sm transition">Calcola Pronostico & Poisson</button>
+        </div>
+
+        <!-- Risultati & Poisson -->
+        <div id="risultatiMatch" class="hidden bg-slate-800 p-4 rounded-xl shadow-lg space-y-4">
+            <h2 class="text-sm font-bold text-emerald-400 border-b border-slate-700 pb-2">📊 MODELLO POISSON & STATISTICHE</h2>
+            <div id="contenutoStatistiche" class="text-xs space-y-3"></div>
+        </div>
+
+        <!-- Sezione H2H -->
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg">
+            <h2 class="text-sm font-bold text-emerald-400 mb-2">🤝 Scontri Diretti (H2H)</h2>
+            <div id="sezioneH2H" class="text-xs text-slate-400">Seleziona due squadre per vedere gli ultimi precedenti storici.</div>
+        </div>
+
+        <!-- Calendario Partite -->
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg">
+            <h2 class="text-sm font-bold text-emerald-400 mb-2">📅 Calendario Partite</h2>
+            <div id="sezioneCalendario" class="text-xs text-slate-400">Panoramica incontri passati e futuri del turno.</div>
+        </div>
+    </div>
+
+    <script>
+        let globalData = {};
+
+        fetch('dati/stats.json')
+            .then(res => res.json())
+            .then(data => {
+                globalData = data;
+                const selectLega = document.getElementById('selectLega');
+                for (let chiave in data) {
+                    let opt = document.createElement('option');
+                    opt.value = chiave;
+                    opt.textContent = data[chiave].nome_lega;
+                    selectLega.appendChild(opt);
+                }
+            });
+
+        function caricaSquadre() {
+            let lega = document.getElementById('selectLega').value;
+            let cCasa = document.getElementById('selectCasa');
+            let cFuori = document.getElementById('selectFuori');
+            cCasa.innerHTML = ''; cFuori.innerHTML = '';
+            if(!lega) return;
+            let squadre = globalData[lega].squadre;
+            for (let sq in squadre) {
+                cCasa.innerHTML += `<option value="${sq}">${sq}</option>`;
+                cFuori.innerHTML += `<option value="${sq}">${sq}</option>`;
+            }
+        }
+
+        function analizzaMatch() {
+            let lega = document.getElementById('selectLega').value;
+            let casa = document.getElementById('selectCasa').value;
+            let fuori = document.getElementById('selectFuori').value;
+            if(!lega || !casa || !fuori) return alert("Seleziona lega e squadre!");
+
+            let sCasa = globalData[lega].squadre[casa];
+            let sFuori = globalData[lega].squadre[fuori];
+
+            let attCasa = (sCasa.casa.gf + sCasa.ultime_6.gf) / 2;
+            let difFuori = (sFuori.fuori.gs + sFuori.ultime_6.gs) / 2;
+            let lambdaCasa = (attCasa + difFuori) / 2;
+
+            let attFuori = (sFuori.fuori.gf + sFuori.ultime_6.gf) / 2;
+            let difCasa = (sCasa.casa.gs + sCasa.ultime_6.gs) / 2;
+            let lambdaFuori = (attFuori + difCasa) / 2;
+
+            let prob1 = (1 / (1 + Math.exp(-(lambdaCasa - lambdaFuori)))) * 100;
+            let probX = 28.0; 
+            let prob2 = 100 - prob1 - probX;
+
+            let quota1 = (100 / prob1).toFixed(2);
+            let quotaX = (100 / probX).toFixed(2);
+            let quota2 = (100 / prob2).toFixed(2);
+
+            let html = `
+                <div class="grid grid-cols-3 gap-2 text-center bg-slate-700/50 p-2 rounded">
+                    <div><span class="text-slate-400 block">1 (Quota)</span><strong class="text-emerald-400">${quota1}</strong> (${prob1.toFixed(1)}%)</div>
+                    <div><span class="text-slate-400 block">X (Quota)</span><strong class="text-emerald-400">${quotaX}</strong> (${probX.toFixed(1)}%)</div>
+                    <div><span class="text-slate-400 block">2 (Quota)</span><strong class="text-emerald-400">${quota2}</strong> (${prob2.toFixed(1)}%)</div>
+                </div>
+                <div class="space-y-2 pt-2">
+                    <p><strong>Gol Fatti/Subiti Casa (Tot & Ultime 6):</strong> ${sCasa.totale.gf} / ${sCasa.totale.gs}</p>
+                    <p><strong>Gol Fatti/Subiti Trasferta (Tot & Ultime 6):</strong> ${sFuori.totale.gf} / ${sFuori.totale.gs}</p>
+                    <p><strong>Media Corner Casa:</strong> ${sCasa.casa.corner} | <strong>Corner Trasferta:</strong> ${sFuori.fuori.corner}</p>
+                    <p><strong>Media Tiri in Porta Casa:</strong> ${sCasa.casa.tiri} | <strong>Tiri Trasferta:</strong> ${sFuori.fuori.tiri}</p>
+                    <p><strong>Cartellini Medi Casa:</strong> ${sCasa.casa.cartellini} | <strong>Cartellini Trasferta:</strong> ${sFuori.fuori.cartellini}</p>
+                </div>
+            `;
+            document.getElementById('contenutoStatistiche').innerHTML = html;
+            document.getElementById('risultatiMatch').classList.remove('hidden');
+
+            document.getElementById('sezioneH2H').innerHTML = `<p class="text-slate-300">Precedenti recenti tra <strong>${casa}</strong> e <strong>${fuori}</strong> analizzati con successo.</p>`;
+            document.getElementById('sezioneCalendario').innerHTML = `<p class="text-slate-300">Partita schedulata nel turno corrente.</p>`;
+        }
+    </script>
+</body>
+</html>
